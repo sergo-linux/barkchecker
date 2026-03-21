@@ -1,0 +1,48 @@
+critical|destructive|rm -rf /
+critical|destructive|rm -rf ~
+critical|destructive|mkfs
+critical|destructive|dd if=
+critical|destructive|shred
+critical|destructive|wipefs
+critical|execution|eval
+critical|execution|bash -c
+critical|execution|sh -c
+critical|execution|exec 
+critical|system|systemctl disable
+critical|system|systemctl mask
+critical|system|poweroff
+critical|system|reboot
+critical|system|halt
+critical|users|userdel
+critical|users|passwd
+critical|services|crontab -r
+critical|services|at now
+critical|permissions|chmod -R 777
+warning|permissions|chmod 777
+warning|permissions|chown
+warning|network|curl
+warning|network|wget
+warning|network|nc 
+warning|network|netcat
+warning|network|scp
+warning|network|rsync
+warning|network|ftp
+warning|network|tftp
+warning|download|git clone
+warning|download|bash <
+warning|download|sh <
+warning|privilege|sudo
+warning|privilege|su 
+warning|encoding|base64
+warning|encoding|openssl enc
+warning|archive|tar -xf
+warning|archive|unzip
+warning|filesystem|mount
+warning|filesystem|umount
+warning|filesystem|chmod +x
+warning|process|kill -9
+warning|process|pkill
+warning|environment|export PATH=
+warning|environment|alias rm=
+info|shell|#!/bin/bash
+info|shell|#!/bin/sh
