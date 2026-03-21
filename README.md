@@ -39,7 +39,7 @@ curl -fsSL https://github.com/sergo-linux/barkchecker/releases/latest/download/i
 
 Go to folder with file
 
-enter command barkchecker
+enter command `barkchecker`
 
 ---
 
