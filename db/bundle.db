@@ -1,0 +1,31 @@
+critical|destructive|rm -rf
+critical|destructive|mkfs
+critical|destructive|dd if=
+critical|execution|eval
+critical|execution|bash -c
+critical|execution|sh -c
+critical|system|systemctl disable
+critical|system|poweroff
+critical|system|reboot
+critical|users|userdel
+critical|permissions|chmod -R 777
+warning|permissions|chmod 777
+warning|network|curl
+warning|network|wget
+warning|network|nc 
+warning|network|netcat
+warning|network|scp
+warning|network|rsync
+warning|network|ftp
+warning|download|git clone
+warning|privilege|sudo
+warning|privilege|su 
+warning|encoding|base64
+warning|archive|tar -xf
+warning|archive|unzip
+warning|filesystem|mount
+warning|filesystem|umount
+warning|process|kill -9
+warning|process|pkill
+info|shell|#!/bin/bash
+info|shell|#!/bin/sh
