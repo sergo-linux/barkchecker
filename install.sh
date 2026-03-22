@@ -12,16 +12,22 @@ REAL_HOME="${REAL_HOME:-$HOME}"
 say() {
     local ru="$1"
     local en="$2"
-    [[ "$LANGUAGE" == "ru" ]] && echo "$ru" || echo "$en"
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo "$ru"
+    else
+        echo "$en"
+    fi
 }
 
 # Print an error message to stderr in the selected language
 say_err() {
     local ru="$1"
     local en="$2"
-    [[ "$LANGUAGE" == "ru" ]] \
-        && echo "Ошибка: $ru" >&2 \
-        || echo "Error: $en" >&2
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo "Ошибка: $ru" >&2
+    else
+        echo "Error: $en" >&2
+    fi
 }
 
 # Run a background command and show a spinner while it runs.
@@ -38,25 +44,31 @@ spinner_run() {
     "$cmd_func" &
     local pid=$!
 
-    [[ "$LANGUAGE" == "ru" ]] \
-        && printf "%s " "$message_ru" \
-        || printf "%s " "$message_en"
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        printf "%s " "$message_ru"
+    else
+        printf "%s " "$message_en"
+    fi
 
     # Animate until the process exits
     while kill -0 "$pid" 2>/dev/null; do
         i=$(( (i + 1) % 4 ))
-        [[ "$LANGUAGE" == "ru" ]] \
-            && printf "\r%s %c" "$message_ru" "${spin:$i:1}" \
-            || printf "\r%s %c" "$message_en" "${spin:$i:1}"
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            printf "\r%s %c" "$message_ru" "${spin:$i:1}"
+        else
+            printf "\r%s %c" "$message_en" "${spin:$i:1}"
+        fi
         sleep 0.1
     done
 
     # Collect exit code and print final status
     wait "$pid"
     local result=$?
-    [[ "$LANGUAGE" == "ru" ]] \
-        && printf "\r%s ✓\n" "$message_ru" \
-        || printf "\r%s ✓\n" "$message_en"
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        printf "\r%s done\n" "$message_ru"
+    else
+        printf "\r%s done\n" "$message_en"
+    fi
 
     return $result
 }
@@ -181,7 +193,7 @@ download_with_progress() {
     fi
 }
 
-# Download a file or exit with a localised error message.
+# Download a file or return 1 with a localised error message.
 # Also fails if the downloaded file is empty.
 download_or_fail() {
     local url="$1"
@@ -198,6 +210,8 @@ download_or_fail() {
         say_err "файл скачан пустым" "downloaded file is empty"
         return 1
     fi
+
+    return 0
 }
 
 # Remove the installed binary and optionally the config directory,
@@ -208,16 +222,22 @@ remove_installation() {
 
     require_sudo
 
-    [[ -f "$install_path" ]] && sudo rm -f "$install_path"
+    if [[ -f "$install_path" ]]; then
+        sudo rm -f "$install_path"
+    fi
 
     if [[ -d "$config_dir" ]]; then
         echo ""
         if [[ "$LANGUAGE" == "ru" ]]; then
             read -r -p "Удалить также $config_dir со всеми логами, базой и карантином? (д/н): " remove_config
-            [[ "$remove_config" =~ ^[дД]$ ]] && rm -rf "$config_dir"
+            if [[ "$remove_config" == "д" || "$remove_config" == "Д" ]]; then
+                rm -rf "$config_dir"
+            fi
         else
             read -r -p "Remove $config_dir with all logs, database and quarantine too? (y/n): " remove_config
-            [[ "$remove_config" =~ ^[yY]$ ]] && rm -rf "$config_dir"
+            if [[ "$remove_config" == "y" || "$remove_config" == "Y" ]]; then
+                rm -rf "$config_dir"
+            fi
         fi
     fi
 
@@ -233,19 +253,25 @@ prepare_urls() {
     BUNDLE_DB_URL="$BASE_URL/db/bundle.db"
 }
 
-# Wrapper so spinner_run can call check_remote as a function
+# Wrapper so spinner_run can call check_remote as a named function
 _check_remote_program() {
     check_remote "$PROGRAM_URL"
+}
+
+# Create config dirs and log file
+_prepare_dirs() {
+    mkdir -p "$CONFIG_DIR" "$DB_DIR" "$QUARANTINE_DIR"
+    touch "$LOG_FILE"
 }
 
 main() {
     # --- Paths ---
     INSTALL_PATH="/usr/local/bin/barkchecker"
-    CONFIG_DIR="$REAL_HOME/.barkchecker"       # main config directory
-    DB_DIR="$CONFIG_DIR/db"                    # signature databases
-    QUARANTINE_DIR="$CONFIG_DIR/.quarantine"   # quarantined files
-    SETTINGS_FILE="$CONFIG_DIR/settings.conf"  # persistent settings
-    LOG_FILE="$CONFIG_DIR/logs.log"            # activity log
+    CONFIG_DIR="$REAL_HOME/.barkchecker"      # main config directory
+    DB_DIR="$CONFIG_DIR/db"                   # signature databases
+    QUARANTINE_DIR="$CONFIG_DIR/.quarantine"  # quarantined files
+    SETTINGS_FILE="$CONFIG_DIR/settings.conf" # persistent settings
+    LOG_FILE="$CONFIG_DIR/logs.log"           # activity log
 
     # Temporary download directory (cleaned up on exit or interrupt)
     TMP_DIR="/tmp/barkchecker_install"
@@ -253,7 +279,7 @@ main() {
     TMP_SH_DB="$TMP_DIR/sh.db"
     TMP_BUNDLE_DB="$TMP_DIR/bundle.db"
 
-    # Register cleanup trap so /tmp is always removed
+    # Register cleanup trap so /tmp is always removed on exit
     trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 
     # Require curl or wget before doing anything else
@@ -268,7 +294,7 @@ main() {
     if [[ -x "$INSTALL_PATH" ]] || command -v barkchecker >/dev/null 2>&1; then
         ask_installed_action
         case "$INSTALL_ACTION" in
-            reinstall) ;;   # fall through to normal install flow
+            reinstall) ;;
             remove)    remove_installation "$INSTALL_PATH" "$CONFIG_DIR" ;;
             exit)      say "Выход." "Exit."; exit 0 ;;
         esac
@@ -279,7 +305,7 @@ main() {
 
     mkdir -p "$TMP_DIR"
 
-    # Check GitHub reachability once; reuse result to avoid a second request
+    # Check GitHub reachability; result stored to avoid a second request
     spinner_run _check_remote_program \
         "Проверка доступа к GitHub..." \
         "Checking GitHub access..."
@@ -330,11 +356,9 @@ main() {
     require_sudo
 
     # Create all required directories and the log file
-    _prepare_dirs() {
-        mkdir -p "$CONFIG_DIR" "$DB_DIR" "$QUARANTINE_DIR"
-        touch "$LOG_FILE"
-    }
-    spinner_run _prepare_dirs "Подготовка каталогов..." "Preparing directories..."
+    spinner_run _prepare_dirs \
+        "Подготовка каталогов..." \
+        "Preparing directories..."
 
     # Install binary to /usr/local/bin
     sudo mv "$TMP_PROGRAM" "$INSTALL_PATH" || {
@@ -343,6 +367,7 @@ main() {
             "failed to move barkchecker to /usr/local/bin"
         exit 1
     }
+
     sudo chmod +x "$INSTALL_PATH" || {
         say_err \
             "не удалось выдать права на выполнение" \
@@ -351,8 +376,15 @@ main() {
     }
 
     # Copy databases into ~/.barkchecker/db/
-    cp "$TMP_SH_DB"     "$DB_DIR/sh.db"     || { say_err "не удалось установить sh.db"     "failed to install sh.db";     exit 1; }
-    cp "$TMP_BUNDLE_DB" "$DB_DIR/bundle.db" || { say_err "не удалось установить bundle.db" "failed to install bundle.db"; exit 1; }
+    cp "$TMP_SH_DB" "$DB_DIR/sh.db" || {
+        say_err "не удалось установить sh.db" "failed to install sh.db"
+        exit 1
+    }
+
+    cp "$TMP_BUNDLE_DB" "$DB_DIR/bundle.db" || {
+        say_err "не удалось установить bundle.db" "failed to install bundle.db"
+        exit 1
+    }
 
     # Write persistent settings (language, channel, first-run flag)
     cat > "$SETTINGS_FILE" <<EOF
@@ -364,13 +396,13 @@ EOF
     # Temp files are removed automatically by the EXIT trap
 
     echo ""
-    say  "Установка завершена."         "Installation complete."
-    say  "Язык: $LANGUAGE"              "Language: $LANGUAGE"
-    say  "Канал: $CHANNEL"              "Channel: $CHANNEL"
-    say  "Путь утилиты: $INSTALL_PATH"  "Program path: $INSTALL_PATH"
+    say  "Установка завершена."            "Installation complete."
+    say  "Язык: $LANGUAGE"                 "Language: $LANGUAGE"
+    say  "Канал: $CHANNEL"                 "Channel: $CHANNEL"
+    say  "Путь утилиты: $INSTALL_PATH"     "Program path: $INSTALL_PATH"
     say  "Папка конфигурации: $CONFIG_DIR" "Config directory: $CONFIG_DIR"
     echo ""
-    say  "Запуск: barkchecker"          "Run: barkchecker"
+    say  "Запуск: barkchecker"             "Run: barkchecker"
 }
 
 main
