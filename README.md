@@ -31,6 +31,8 @@ Lightweight security tool for scanning `.sh`, `.bundle` and executable files.
 
 Just download `install.sh` from latest release
 
+Execute it with `sudo`
+
 ---
 
 ## Usage
