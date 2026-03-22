@@ -39,7 +39,7 @@ Execute it with `sudo`
 
 Go to folder with files
 
-enter command `barkchecker`
+Enter command `barkchecker`
 
 ---
 
