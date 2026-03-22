@@ -17,7 +17,13 @@ SH_DB="$DB_DIR/sh.db"
 BUNDLE_DB="$DB_DIR/bundle.db"
 QUARANTINE_DIR="$CONFIG_DIR/.quarantine"
 
-FIRST_RUN="1"
+# GitHub links
+PROGRAM_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/barkchecker"
+VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/version.txt"
+
+SH_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db/sh.db"
+BUNDLE_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db/bundle.db"
+DB_VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db_version.txt"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
     source "$SETTINGS_FILE"
@@ -143,6 +149,7 @@ show_help() {
         echo -e "   --beta      Установить beta/pre-release версию"
         echo -e "   --stable    Вернуться на стабильную версию"
         echo -e "   --lang      Сменить язык"
+        echo -e "   --update    Обновить утилиту и базу"
     else
         echo -e "${YELLOW_BOLD}Bark Checker${RESET} — check .sh and .bundle files"
         echo -e "Usage: barkchecker [options]"
@@ -153,6 +160,7 @@ show_help() {
         echo -e "   --beta      Switch to beta channel"
         echo -e "   --stable    Switch to stable channel"
         echo -e "   --lang      Change language"
+        echo -e "   --update    Update program and database"
     fi
 }
 
@@ -215,12 +223,21 @@ confirm_quarantine() {
 
         if [[ "$LANGUAGE" == "ru" ]]; then
             count=${#CRITICAL_DETAILS[@]}
-
-        if [[ "$LANGUAGE" == "ru" ]]; then
             echo -e "${RED_BOLD}Обнаружено критичных паттернов: $count${RESET}"
-        else
-            echo -e "${RED_BOLD}Critical patterns detected: $count${RESET}"
-        fi
+
+            read -p "Переместить файл в карантин? (д/н): " answer
+
+            case "$answer" in
+                д|Д)
+                    return 0
+                    ;;
+                н|Н)
+                    return 1
+                    ;;
+                *)
+                    echo -e "${YELLOW_BOLD}Пожалуйста, введите только: д или н${RESET}"
+                    ;;
+            esac
 
             read -p "Переместить файл в карантин? (д/н): " answer
 
@@ -330,6 +347,245 @@ log_msg() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
+# GitHub connection test
+check_github_access() {
+    local test_url="$1"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -Is "$test_url" >/dev/null 2>&1
+        return $?
+    elif command -v wget >/dev/null 2>&1; then
+        wget --spider -q "$test_url"
+        return $?
+    else
+        return 2
+    fi
+}
+
+# Download update from GitHub
+download_with_progress() {
+    local url="$1"
+    local output="$2"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL# "$url" -o "$output"
+        return $?
+    elif command -v wget >/dev/null 2>&1; then
+        wget --show-progress -q "$url" -O "$output"
+        return $?
+    else
+        return 2
+    fi
+}
+
+get_remote_text() {
+    local url="$1"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" 2>/dev/null
+        return $?
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$url" 2>/dev/null
+        return $?
+    else
+        return 2
+    fi
+}
+
+# Update program
+update_program() {
+    local remote_version
+    local tmp_program="/tmp/barkchecker_update_program"
+    local target_path
+
+    remote_version="$(get_remote_text "$VERSION_URL")"
+
+    if [[ -z "$remote_version" ]]; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} не удалось получить удалённую версию утилиты"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} failed to fetch remote program version"
+        fi
+        return 1
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${WHITE_BOLD}Текущая версия утилиты:${RESET} $PROGRAM_VERSION"
+        echo -e "${WHITE_BOLD}Последняя версия утилиты:${RESET} $remote_version"
+    else
+        echo -e "${WHITE_BOLD}Current program version:${RESET} $PROGRAM_VERSION"
+        echo -e "${WHITE_BOLD}Latest program version:${RESET} $remote_version"
+    fi
+
+    if [[ "$PROGRAM_VERSION" == "$remote_version" ]]; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${GREEN_BOLD}Утилита уже обновлена.${RESET}"
+        else
+            echo -e "${GREEN_BOLD}Program is already up to date.${RESET}"
+        fi
+        return 0
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN_BOLD}Скачивание новой версии утилиты...${RESET}"
+    else
+        echo -e "${CYAN_BOLD}Downloading new program version...${RESET}"
+    fi
+
+    if ! download_with_progress "$PROGRAM_URL" "$tmp_program"; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} не удалось скачать утилиту"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} failed to download program"
+        fi
+        return 1
+    fi
+
+    chmod +x "$tmp_program"
+    target_path="$(command -v barkchecker 2>/dev/null)"
+
+    if [[ -z "$target_path" ]]; then
+        target_path="/usr/local/bin/barkchecker"
+    fi
+
+    if [[ "$target_path" == "$HOME/"* ]]; then
+        mv "$tmp_program" "$target_path"
+    else
+        sudo mv "$tmp_program" "$target_path" || return 1
+        sudo chmod +x "$target_path" || return 1
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${GREEN_BOLD}Утилита обновлена до версии $remote_version.${RESET}"
+    else
+        echo -e "${GREEN_BOLD}Program updated to version $remote_version.${RESET}"
+    fi
+
+    log_msg "[update] program updated to $remote_version"
+    return 0
+}
+
+# Update DB
+update_database() {
+    local remote_db_version
+    local tmp_sh_db="/tmp/barkchecker_update_sh.db"
+    local tmp_bundle_db="/tmp/barkchecker_update_bundle.db"
+
+    remote_db_version="$(get_remote_text "$DB_VERSION_URL")"
+
+    if [[ -z "$remote_db_version" ]]; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} не удалось получить удалённую версию базы"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} failed to fetch remote database version"
+        fi
+        return 1
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${WHITE_BOLD}Текущая версия базы:${RESET} $DB_VERSION"
+        echo -e "${WHITE_BOLD}Последняя версия базы:${RESET} $remote_db_version"
+    else
+        echo -e "${WHITE_BOLD}Current database version:${RESET} $DB_VERSION"
+        echo -e "${WHITE_BOLD}Latest database version:${RESET} $remote_db_version"
+    fi
+
+    if [[ "$DB_VERSION" == "$remote_db_version" ]]; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${GREEN_BOLD}База уже обновлена.${RESET}"
+        else
+            echo -e "${GREEN_BOLD}Database is already up to date.${RESET}"
+        fi
+        return 0
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN_BOLD}Скачивание новой базы sh.db...${RESET}"
+    else
+        echo -e "${CYAN_BOLD}Downloading new sh.db...${RESET}"
+    fi
+
+    if ! download_with_progress "$SH_DB_URL" "$tmp_sh_db"; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} не удалось скачать sh.db"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} failed to download sh.db"
+        fi
+        return 1
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN_BOLD}Скачивание новой базы bundle.db...${RESET}"
+    else
+        echo -e "${CYAN_BOLD}Downloading new bundle.db...${RESET}"
+    fi
+
+    if ! download_with_progress "$BUNDLE_DB_URL" "$tmp_bundle_db"; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} не удалось скачать bundle.db"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} failed to download bundle.db"
+        fi
+        return 1
+    fi
+
+    mv "$tmp_sh_db" "$SH_DB" || return 1
+    mv "$tmp_bundle_db" "$BUNDLE_DB" || return 1
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${GREEN_BOLD}База обновлена до версии $remote_db_version.${RESET}"
+    else
+        echo -e "${GREEN_BOLD}Database updated to version $remote_db_version.${RESET}"
+    fi
+
+    log_msg "[update] database updated to $remote_db_version"
+    DB_VERSION="$remote_db_version"
+    return 0
+}
+
+# UPDATER!!!
+update_all() {
+    local update_failed=0
+
+    echo ""
+
+    if ! check_github_access "$VERSION_URL"; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} нет доступа к GitHub или файлы обновления недоступны"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} cannot access GitHub or update files are unavailable"
+        fi
+        return 1
+    fi
+
+    if [[ "$LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN_BOLD}Проверка обновлений...${RESET}"
+    else
+        echo -e "${CYAN_BOLD}Checking for updates...${RESET}"
+    fi
+
+    echo ""
+    update_program || update_failed=1
+
+    echo ""
+    update_database || update_failed=1
+
+    echo ""
+    if [[ $update_failed -eq 0 ]]; then
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${GREEN_BOLD}Обновление завершено.${RESET}"
+        else
+            echo -e "${GREEN_BOLD}Update complete.${RESET}"
+        fi
+    else
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${YELLOW_BOLD}Обновление завершено с ошибками.${RESET}"
+        else
+            echo -e "${YELLOW_BOLD}Update finished with errors.${RESET}"
+        fi
+    fi
+}
+
 # Argument flags
 SHOW_HELP=0
 SHOW_VERSION=0
@@ -339,6 +595,7 @@ SET_BETA=0
 SET_STABLE=0
 CRITICAL_FOUND=0
 CRITICAL_DETAILS=()
+SET_UPDATE=0
 
 # Argument handler
 while [[ $# -gt 0 ]]; do
@@ -367,6 +624,10 @@ while [[ $# -gt 0 ]]; do
             SET_STABLE=1
             shift
             ;;
+        --update)
+            SET_UPDATE=1
+            shift
+            ;;
         --lang|--language)
             change_language
             ;;
@@ -386,6 +647,11 @@ done
 # Run actions
 if [[ $SHOW_HELP -eq 1 ]]; then
     show_help
+    exit 0
+fi
+
+if [[ $SET_UPDATE -eq 1 ]]; then
+    update_all
     exit 0
 fi
 
@@ -455,7 +721,7 @@ for f in *; do
 done
 
     if [[ ${#FILES[@]} -eq 0 ]]; then
-        msg no_files
+        msg no_files - -
         exit 1
     fi
 
@@ -545,11 +811,11 @@ scan_with_db() {
                     echo -e "  ${WHITE_BOLD}Строка:${RESET} $line_number"
                     echo -e "  ${WHITE_BOLD}Содержимое:${RESET} $line_content"
                 else
-            echo -e "  ${WHITE_BOLD}Category:${RESET} $category"
-            echo -e "  ${WHITE_BOLD}Pattern:${RESET} $pattern"
-            echo -e "  ${WHITE_BOLD}Line:${RESET} $line_number"
-            echo -e "  ${WHITE_BOLD}Content:${RESET} $line_content"
-            fi
+                    echo -e "  ${WHITE_BOLD}Category:${RESET} $category"
+                    echo -e "  ${WHITE_BOLD}Pattern:${RESET} $pattern"
+                    echo -e "  ${WHITE_BOLD}Line:${RESET} $line_number"
+                    echo -e "  ${WHITE_BOLD}Content:${RESET} $line_content"
+                fi
 
 # --- ADDITIONAL CHECK curl/wget ---
 if [[ "$pattern" == "curl" || "$pattern" == "wget" ]]; then
@@ -588,11 +854,19 @@ fi
 }
 
 scan_sh_file() {
+    [[ ! -f "$SH_DB" ]] && {
+        msg critical "sh.db not found" "Файл sh.db не найден"
+        exit 1
+    }
     local file="$1"
     scan_with_db "$file" "$SH_DB" "$file"
 }
 
 scan_bundle_file() {
+    [[ ! -f "$BUNDLE_DB" ]] && {
+        msg critical "bundle.db not found" "Файл bundle.db не найден"
+        exit 1
+    }
     local file="$1"
     local extracted="/tmp/barkchecker_bundle_strings.txt"
 
@@ -606,22 +880,18 @@ run_scan() {
     CRITICAL_FOUND=0
     CRITICAL_DETAILS=()
 
-    case "$TARGET_FILE" in
-        *.sh)
-            scan_sh_file "$TARGET_FILE"
-            ;;
-        *.bundle)
-            scan_bundle_file "$TARGET_FILE"
-            ;;
-        *)
-            if [[ "$LANGUAGE" == "ru" ]]; then
-                echo -e "${RED_BOLD}Ошибка:${RESET} неподдерживаемый тип файла"
-            else
-                echo -e "${RED_BOLD}Error:${RESET} unsupported file type"
-            fi
-            exit 1
-            ;;
-    esac
+    if [[ "$TARGET_FILE" == *.bundle ]]; then
+        scan_bundle_file "$TARGET_FILE"
+    elif [[ "$TARGET_FILE" == *.sh ]] || head -n 1 "$TARGET_FILE" | grep -qE '^#!.*(bash|sh)'; then
+        scan_sh_file "$TARGET_FILE"
+    else
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} неподдерживаемый тип файла"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} unsupported file type"
+        fi
+        exit 1
+    fi
 
     if [[ $CRITICAL_FOUND -eq 1 ]]; then
         if confirm_quarantine; then
