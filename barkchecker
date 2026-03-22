@@ -248,6 +248,7 @@ confirm_quarantine() {
                     ;;
             esac
         else
+            count=${#CRITICAL_DETAILS[@]}
             echo -e "${RED_BOLD}Critical patterns detected: $count${RESET}"
 
             read -p "Move file to quarantine? (y/n): " answer
