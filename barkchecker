@@ -18,16 +18,25 @@ BUNDLE_DB="$DB_DIR/bundle.db"
 QUARANTINE_DIR="$CONFIG_DIR/.quarantine"
 
 # GitHub links
-PROGRAM_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/barkchecker"
-VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/version.txt"
-
-SH_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db/sh.db"
-BUNDLE_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db/bundle.db"
-DB_VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/main/db_version.txt"
-
 if [[ -f "$SETTINGS_FILE" ]]; then
     source "$SETTINGS_FILE"
 fi
+
+set_update_urls() {
+    if [[ "$CHANNEL" == "beta" ]]; then
+        BRANCH="beta"
+    else
+        BRANCH="main"
+    fi
+
+    PROGRAM_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/$BRANCH/barkchecker"
+    VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/$BRANCH/version.txt"
+
+    SH_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/$BRANCH/db/sh.db"
+    BUNDLE_DB_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/$BRANCH/db/bundle.db"
+    DB_VERSION_URL="https://raw.githubusercontent.com/sergo-linux/barkchecker/$BRANCH/db_version.txt"
+}
+set_update_urls
 
 # Reset font
 RESET='\033[0m'
@@ -224,20 +233,6 @@ confirm_quarantine() {
         if [[ "$LANGUAGE" == "ru" ]]; then
             count=${#CRITICAL_DETAILS[@]}
             echo -e "${RED_BOLD}Обнаружено критичных паттернов: $count${RESET}"
-
-            read -p "Переместить файл в карантин? (д/н): " answer
-
-            case "$answer" in
-                д|Д)
-                    return 0
-                    ;;
-                н|Н)
-                    return 1
-                    ;;
-                *)
-                    echo -e "${YELLOW_BOLD}Пожалуйста, введите только: д или н${RESET}"
-                    ;;
-            esac
 
             read -p "Переместить файл в карантин? (д/н): " answer
 
@@ -545,18 +540,42 @@ update_database() {
 
 # UPDATER!!!
 update_all() {
+    set_update_urls
     local update_failed=0
 
     echo ""
 
-    if ! check_github_access "$VERSION_URL"; then
+# fallback if beta empty or unavalible
+if ! check_github_access "$VERSION_URL"; then
+    if [[ "$CHANNEL" == "beta" ]]; then
         if [[ "$LANGUAGE" == "ru" ]]; then
-            echo -e "${RED_BOLD}Ошибка:${RESET} нет доступа к GitHub или файлы обновления недоступны"
+            echo -e "${YELLOW_BOLD}Beta канал пока пуст или недоступен, переключаемся на stable...${RESET}"
         else
-            echo -e "${RED_BOLD}Error:${RESET} cannot access GitHub or update files are unavailable"
+            echo -e "${YELLOW_BOLD}Beta channel unavailable, falling back to stable...${RESET}"
+        fi
+
+        CHANNEL="stable"
+        save_settings
+        set_update_urls
+
+        # re-check for stable
+        if ! check_github_access "$VERSION_URL"; then
+            if [[ "$LANGUAGE" == "ru" ]]; then
+                echo -e "${RED_BOLD}Ошибка:${RESET} даже stable недоступен"
+            else
+                echo -e "${RED_BOLD}Error:${RESET} even stable is unavailable"
+            fi
+            return 1
+        fi
+    else
+        if [[ "$LANGUAGE" == "ru" ]]; then
+            echo -e "${RED_BOLD}Ошибка:${RESET} нет доступа к обновлениям"
+        else
+            echo -e "${RED_BOLD}Error:${RESET} cannot access updates"
         fi
         return 1
     fi
+fi
 
     if [[ "$LANGUAGE" == "ru" ]]; then
         echo -e "${CYAN_BOLD}Проверка обновлений...${RESET}"
@@ -702,8 +721,6 @@ fi
 
 select_target_file() {
     FILES=()
-
-FILES=()
 
 for f in *; do
     [[ ! -f "$f" ]] && continue
