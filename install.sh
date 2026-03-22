@@ -4,7 +4,8 @@
 REPO_USER="sergo-linux"
 REPO_NAME="barkchecker"
 
-# Resolve real home directory even when running under sudo
+# Resolve real user and home directory even when running under sudo
+REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME="${SUDO_USER:+$(eval echo "~$SUDO_USER")}"
 REAL_HOME="${REAL_HOME:-$HOME}"
 
@@ -258,10 +259,11 @@ _check_remote_program() {
     check_remote "$PROGRAM_URL"
 }
 
-# Create config dirs and log file
+# Create config dirs and log file, ensure they belong to the real user
 _prepare_dirs() {
     mkdir -p "$CONFIG_DIR" "$DB_DIR" "$QUARANTINE_DIR"
     touch "$LOG_FILE"
+    chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DIR"
 }
 
 main() {
@@ -305,7 +307,7 @@ main() {
 
     mkdir -p "$TMP_DIR"
 
-    # Check GitHub reachability; result stored to avoid a second request
+    # Check GitHub reachability once; reuse result to avoid a second request
     spinner_run _check_remote_program \
         "Проверка доступа к GitHub..." \
         "Checking GitHub access..."
@@ -393,7 +395,8 @@ CHANNEL="$CHANNEL"
 FIRST_RUN="1"
 EOF
 
-    # Temp files are removed automatically by the EXIT trap
+    # Fix ownership of entire config directory so nothing belongs to root
+    chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DIR"
 
     echo ""
     say  "Установка завершена."            "Installation complete."
