@@ -5,7 +5,7 @@
 
 
 # Settings
-PROGRAM_VERSION="1.0.0"
+PROGRAM_VERSION="1.0.1"
 DB_VERSION="1.0"
 
 # Paths
@@ -248,17 +248,7 @@ confirm_quarantine() {
                     ;;
             esac
         else
-            echo -e "${RED_BOLD}Critical patterns detected:${RESET}"
-            echo ""
-
-            for item in "${CRITICAL_DETAILS[@]}"; do
-                IFS='|' read -r category pattern line_number line_content <<< "$item"
-                echo -e "  ${WHITE_BOLD}Category:${RESET} $category"
-                echo -e "  ${WHITE_BOLD}Pattern:${RESET} $pattern"
-                echo -e "  ${WHITE_BOLD}Line:${RESET} $line_number"
-                echo -e "  ${WHITE_BOLD}Content:${RESET} $line_content"
-                echo ""
-            done
+            echo -e "${RED_BOLD}Critical patterns detected: $count${RESET}"
 
             read -p "Move file to quarantine? (y/n): " answer
 
