@@ -29,15 +29,13 @@ Lightweight security tool for scanning `.sh`, `.bundle` and executable files.
 
 ## Installation
 
-Download and run the installer from the latest release:
-
-curl -fsSL https://github.com/sergo-linux/barkchecker/releases/latest/download/install.sh | bash
+Just download `install.sh` from latest release
 
 ---
 
 ## Usage
 
-Go to folder with file
+Go to folder with files
 
 enter command `barkchecker`
 
